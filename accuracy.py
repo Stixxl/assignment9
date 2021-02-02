@@ -39,8 +39,8 @@ def eval_model(model, pred_step, counts):
     conf = 0.95
 
     print("Total Values: {}".format(min(len(model), len(counts))))
-    print("Model Input: {}".format(model))
-    print("Measured Data: {}".format(counts))
+    print("Forecast: {}".format(model))
+    print("Validation Set: {}".format(counts))
     print()
 
     mae = mean_absolute_error(model, counts)
