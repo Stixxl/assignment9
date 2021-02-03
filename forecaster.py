@@ -1,3 +1,4 @@
+import keras
 import pandas
 import mchmm as mc
 from pandas import DataFrame
@@ -37,7 +38,7 @@ def read_data(filepath):
 def plot(filepath, predictions, title, trainingdata=None):
     pp.plot(predictions, label='Prediction')
     if trainingdata is not None:
-        pp.plot(trainingdata['count'].values, color='red', label='Training Data')
+        pp.plot(trainingdata, color='red', label='Training Data')
         pp.legend(loc="upper left")
     pp.ylabel('count')
     pp.xlabel('timestep')
@@ -52,19 +53,20 @@ def forecast_markov(trainingdata, evaldata):
     print(evaldata['count'][0])
     ids, states = mod.simulate(n, start=10)
     plot(f'markov_{n}.png', states, 'Forecast based on Markov Chains',
-         evaldata)
+         evaldata['count'].values)
     print('Accuracy Scores for Markov Chains:')
     accuracy.eval_model(states, 1, evaldata['count'].values)
 
 
 def forecast_linear_reg(trainingdata, evaldata):
     n = len(evaldata)
-    x = np.array(trainingdata['timestamp']).reshape((-1, 1))
+    x = np.array(trainingdata.index.values).reshape((-1, 1))
     y = np.array(trainingdata['count'])
     model = LinearRegression().fit(x, y)
     predictions = model.predict(x[:n])
     plot(f'linear_reg_{n}.png', predictions,
-         'Forecast based on Linear Regression (OLS)', evaldata)
+         'Forecast based on Linear Regression (OLS)',
+         evaldata['count'].values)
     print('Summary')
     print(f'Coefficient of Determination: {model.score(x, y)}')
     print(f'Function: {model.coef_}t + {model.intercept_}')
@@ -83,59 +85,52 @@ def forecast_sarimax(trainingdata, evaldata):
     print(evaldata)
     accuracy.eval_model(predictions, 1, evaldata['count'].values)
     plot(f'sarimax_{n}.png', predictions,
-         'Forecast based on the SARIMAX Model', evaldata)
+         'Forecast based on the SARIMAX Model', evaldata['count'].values)
 
-
-def forecast_machine(trainingdata, evaldata):
-    # Create the model from scratch
-    models = []
-    models.append(('LR', LogisticRegression(solver='liblinear', multi_class='ovr')))
-    models.append(('LDA', LinearDiscriminantAnalysis()))
-    models.append(('KNN', KNeighborsClassifier()))
-    models.append(('CART', DecisionTreeClassifier()))
-    models.append(('NB', GaussianNB()))
-    models.append(('SVM', SVC(gamma='auto')))
-    # evaluate each model in turn
-    results = []
-    names = []
-    for name, model in models:
-        kfold = StratifiedKFold(n_splits=10, random_state=1, shuffle=True)  # FIXME
-        cv_results = cross_val_score(model, trainingdata['count'],
-                                     cv=kfold, scoring='accuracy')
-        results.append(cv_results)
-        names.append(name)
-        print('%s: %f (%f)' % (name, cv_results.mean(), cv_results.std()))
 
 
 def forecast_neural(trainingdata, evaldata):
     scaler = MinMaxScaler(feature_range=(0, 1))
     dataset = scaler.fit_transform(np.array(trainingdata['count'].astype(float)).reshape(-1, 1))
     validationset = scaler.fit_transform(np.array(evaldata['count'].astype(float)).reshape(-1, 1))
-    look_back = 1
+    look_back = 10
     trainX, trainY = create_dataset(dataset, look_back)
     testX, testY = create_dataset(validationset, look_back)
     trainX = np.reshape(trainX, (trainX.shape[0], 1, trainX.shape[1]))
-    testX = np.reshape(testX, (testX.shape[0], 1, testX.shape[1]))
 
-    model = Sequential()
-    model.add(LSTM(4, input_shape=(1, look_back)))
-    model.add(Dense(1))
-    model.compile(loss='mean_squared_error', optimizer='adam')
-    model.fit(trainX, trainY, epochs=100, batch_size=1, verbose=2)
-    model.save()
+    try:
+        model = keras.models.load_model(f"lstm_network_{look_back}")
+        print('Successfully loaded model.')
+    except IOError:
+        print('Creating new model.')
+        model = Sequential()
+        model.add(LSTM(4, input_shape=(1, look_back)))
+        model.add(Dense(1))
+        model.compile(loss='mean_squared_error', optimizer='adam')
+        model.fit(trainX, trainY, epochs=100, batch_size=1, verbose=2)
+        model.save(f'lstm_network_{look_back}')
+
 
     # make predictions
-    trainPredict = model.predict(trainX)
-    testPredict = model.predict(testX)
+    # trainPredict = model.predict(trainX)
+    # testPredict = model.predict(testX)
+    prediction_list = trainX[-1]
+
+    for _ in range(len(evaldata)):
+        x = prediction_list[-look_back:]
+        x = x.reshape((1, 1, look_back))
+        out = model.predict(x)[0][0]
+        prediction_list = np.append(prediction_list, out)
+    prediction_list = prediction_list[look_back:]
     # invert predictions
-    trainPredict = scaler.inverse_transform(trainPredict)
-    trainY = scaler.inverse_transform([trainY])
-    testPredict = scaler.inverse_transform(testPredict)
-    testY = scaler.inverse_transform([testY])
-    print(np.shape(trainY))
-    print(np.shape(trainPredict))
-    accuracy.eval_model(trainY[0], 1, trainPredict[:,0])
-    accuracy.eval_model(testY[0], 1, testPredict[:,0])
+    print(np.shape(testX))
+    print(testX)
+    testPredict = scaler.inverse_transform(prediction_list.reshape(-1, 1))
+    testX = scaler.inverse_transform(testX)
+    accuracy.eval_model(testPredict[:,0], 1, evaldata['count'].values)
+    plot(f'lstm_l{look_back}_{len(testPredict[:,0])}.png', testPredict[:,0],
+         'Forecast based on a LSTM Neural Network', evaldata['count'].values)
+
 
 def create_dataset(dataset, look_back=1):
     dataX, dataY = [], []
@@ -149,7 +144,7 @@ def create_dataset(dataset, look_back=1):
 def create_sequences(dataset):
     training_length = 50
     features = []
-    for i in range(training_length, len(trainingdata)):
+    for i in range(training_length, len(dataset)):
         extract = dataset[i - training_length:i + 1]
         features.append(extract[:-1])
     features = np.array(features)
@@ -157,11 +152,10 @@ def create_sequences(dataset):
 
 data = read_data('KafkaTrainingData.txt')
 train = data.iloc[:1000]
-# print(collections.Counter(train['count']))
 validation = data.iloc[1000:1100]
 # plot('trainingdata100.png', trainingdata['count'].head(100))
 # forecast_markov(train, validation)
-# forecast_linear_reg(50, data)
+forecast_linear_reg(train, validation)
 # forecast_sarimax(train, validation)
-forecast_neural(train, validation)
+# forecast_neural(train, validation)
 # forecast_machine(train, validation)
