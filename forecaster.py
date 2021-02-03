@@ -1,3 +1,5 @@
+import warnings
+
 import keras
 import pandas
 import mchmm as mc
@@ -17,9 +19,8 @@ import matplotlib.pyplot as pp
 import statsmodels.api as sm
 import accuracy
 import datetime
-from keras.models import Sequential
-from keras.layers import LSTM, Dense, Dropout, Masking, Embedding
-import tensorflow
+m
+import itertools
 
 
 def dateparse(time_in_secs):
@@ -60,7 +61,9 @@ def forecast_markov(trainingdata, evaldata):
 
 def forecast_linear_reg(trainingdata, evaldata):
     n = len(evaldata)
-    x = np.array(trainingdata.index.values).reshape((-1, 1))
+    to_timestamp_converter = lambda t: (t - np.datetime64('1970-01-01T00:00:00Z')) / np.timedelta64(1, 's')
+    x = np.array([to_timestamp_converter(t) for t in trainingdata.index.values]).reshape((-1, 1))
+    print(x)
     y = np.array(trainingdata['count'])
     model = LinearRegression().fit(x, y)
     predictions = model.predict(x[:n])
@@ -76,15 +79,18 @@ def forecast_linear_reg(trainingdata, evaldata):
 
 def forecast_sarimax(trainingdata, evaldata):
     n = len(evaldata)
-    mod = sm.tsa.statespace.SARIMAX(trainingdata['count'].astype(float), order=(0, 1, 0), seasonal_order=(1, 0, 0, 12),
+    periods_in_season = 24
+
+    mod = sm.tsa.statespace.SARIMAX(trainingdata['count'].astype(float), order=(0, 0, 0),
+                                    seasonal_order=(1, 0, 1, periods_in_season),
                                     enforce_stationarity=False)
     res = mod.fit(disp=False)
     print(res.summary())
+
     predictions = res.forecast(n)
     print(predictions)
-    print(evaldata)
-    accuracy.eval_model(predictions, 1, evaldata['count'].values)
-    plot(f'sarimax_{n}.png', predictions,
+    accuracy.eval_model(predictions.values, 1, evaldata['count'].values)
+    plot(f'sarimax/sarimax_s{periods_in_season}_{n}.png', predictions.values,
          'Forecast based on the SARIMAX Model', evaldata['count'].values)
 
 
@@ -93,7 +99,7 @@ def forecast_neural(trainingdata, evaldata):
     scaler = MinMaxScaler(feature_range=(0, 1))
     dataset = scaler.fit_transform(np.array(trainingdata['count'].astype(float)).reshape(-1, 1))
     validationset = scaler.fit_transform(np.array(evaldata['count'].astype(float)).reshape(-1, 1))
-    look_back = 10
+    look_back = 20
     trainX, trainY = create_dataset(dataset, look_back)
     testX, testY = create_dataset(validationset, look_back)
     trainX = np.reshape(trainX, (trainX.shape[0], 1, trainX.shape[1]))
@@ -155,7 +161,7 @@ train = data.iloc[:1000]
 validation = data.iloc[1000:1100]
 # plot('trainingdata100.png', trainingdata['count'].head(100))
 # forecast_markov(train, validation)
-forecast_linear_reg(train, validation)
+# forecast_linear_reg(train, validation)
 # forecast_sarimax(train, validation)
-# forecast_neural(train, validation)
+forecast_neural(train, validation)
 # forecast_machine(train, validation)

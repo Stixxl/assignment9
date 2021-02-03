@@ -13,13 +13,13 @@ def naive_forecast_error(actual):
     A = np.array(actual)
     P = np.roll(A, 1)
     P[0] = A[0]
-    return np.sum(np.abs(A - P)) / (len(A) - 1)
+    return np.sum(np.abs(A - P))
 
 
 def mean_absolute_scaled_error(actual, forecast):
     F = np.array(forecast)
     A = np.array(actual)
-    return np.sum(np.abs(F - A) / naive_forecast_error(actual)) / max(len(A), len(F))
+    return np.sum(np.abs(F - A)) / naive_forecast_error(actual)
 
 
 def interval_accuracy_score(actual, lbs, ubs, conf):
@@ -30,24 +30,25 @@ def interval_accuracy_score(actual, lbs, ubs, conf):
                   np.where(A > U, 1, 0) * (A - U) * 2 / conf) / len(A)
 
 
-def eval_model(model, pred_step, counts):
-    model = model[::pred_step]
-    counts = counts[::pred_step]
+def eval_model(predictions, pred_step, actual):
+    predictions = predictions[::pred_step]
+    actual = actual[::pred_step]
 
     lbs = [5, 5, 5, 5, 5, 5, 5, 5, 5]
     ubs = [5, 5, 5, 5, 5, 5, 5, 5, 5]
     conf = 0.95
 
-    print("Total Values: {}".format(min(len(model), len(counts))))
-    print("Forecast: {}".format(model))
-    print("Validation Set: {}".format(counts))
+    print("Total Values: {}".format(min(len(predictions), len(actual))))
+    print("Forecast: {}".format(predictions))
+    print("Validation Set: {}".format(actual))
     print()
 
-    mae = mean_absolute_error(model, counts)
-    rmse = math.sqrt(mean_squared_error(model, counts))
-    mape = mean_absolute_percentage_error(model, counts)
-    smape = symmetric_mean_absolute_percentage_error(model, counts)
-    mase = mean_absolute_scaled_error(model, counts)
+    mae = mean_absolute_error(actual, predictions)
+    rmse = math.sqrt(mean_squared_error(actual, predictions))
+    ignore_zero_values = np.where(np.array(actual) == 0, 0, 1)
+    mape = mean_absolute_percentage_error(actual, predictions, ignore_zero_values)
+    smape = symmetric_mean_absolute_percentage_error(actual, predictions)
+    mase = mean_absolute_scaled_error(actual, predictions)
     # ias = interval_accuracy_score(counts, lbs, ubs, conf)
 
     print("Mean Absolute Error: {}".format(mae))
