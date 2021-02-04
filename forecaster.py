@@ -1,6 +1,7 @@
 import warnings
-
 import keras
+from keras.models import Sequential
+from keras.layers import LSTM, Dense
 import pandas
 import mchmm as mc
 from pandas import DataFrame
@@ -19,7 +20,6 @@ import matplotlib.pyplot as pp
 import statsmodels.api as sm
 import accuracy
 import datetime
-m
 import itertools
 
 
@@ -138,6 +138,44 @@ def forecast_neural(trainingdata, evaldata):
          'Forecast based on a LSTM Neural Network', evaldata['count'].values)
 
 
+def forecast_neural_timestamp(trainingdata, evaldata):
+    scaler = MinMaxScaler(feature_range=(0, 1))
+    trainY = scaler.fit_transform(np.array(trainingdata['count'].astype(float)).reshape(-1, 1))
+    trainX = scaler.fit_transform(np.array(trainingdata.index.values.astype(float)).reshape(-1, 1))
+    testY = scaler.fit_transform(np.array(evaldata['count'].astype(float)).reshape(-1, 1))
+    testX = scaler.fit_transform(np.array(trainingdata.index.values.astype(float)).reshape(-1, 1))
+    try:
+        model = keras.models.load_model(f"lstm_network_timestamp")
+        print('Successfully loaded model.')
+    except IOError:
+        print('Creating new model.')
+        model = Sequential()
+        model.add(LSTM(4, input_shape=(1, 1)))
+        model.add(Dense(1))
+        model.compile(loss='mean_squared_error', optimizer='adam')
+        model.fit(trainX, trainY, epochs=100, batch_size=1, verbose=2)
+        model.save(f'lstm_network_timestamp')
+
+
+    # make predictions
+    # trainPredict = model.predict(trainX)
+    # testPredict = model.predict(testX)
+    prediction_list = np.array()
+
+    for x in testX:
+        out = model.predict(x)[0][0]
+        print(out)
+        prediction_list = np.append(prediction_list, out)
+    # invert predictions
+    print(np.shape(testX))
+    print(testX)
+    testPredict = scaler.inverse_transform(prediction_list.reshape(-1, 1))
+    testX = scaler.inverse_transform(testX)
+    accuracy.eval_model(testPredict[:,0], 1, evaldata['count'].values)
+    plot(f'lstm_timestamp_{len(testPredict[:,0])}.png', testPredict[:,0],
+         'Forecast based on a LSTM Neural Network', evaldata['count'].values)
+
+
 def create_dataset(dataset, look_back=1):
     dataX, dataY = [], []
     for i in range(len(dataset) - look_back - 1):
@@ -163,5 +201,5 @@ validation = data.iloc[1000:1100]
 # forecast_markov(train, validation)
 # forecast_linear_reg(train, validation)
 # forecast_sarimax(train, validation)
-forecast_neural(train, validation)
-# forecast_machine(train, validation)
+# forecast_neural(train, validation)
+forecast_neural_timestamp(train, validation)
