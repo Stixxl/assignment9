@@ -201,5 +201,5 @@ validation = data.iloc[1000:1100]
 # forecast_markov(train, validation)
 # forecast_linear_reg(train, validation)
 # forecast_sarimax(train, validation)
-# forecast_neural(train, validation)
-forecast_neural_timestamp(train, validation)
+forecast_neural(train, validation)
+# forecast_neural_timestamp(train, validation)

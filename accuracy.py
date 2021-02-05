@@ -22,21 +22,24 @@ def mean_absolute_scaled_error(actual, forecast):
     return np.sum(np.abs(F - A)) / naive_forecast_error(actual)
 
 
-def interval_accuracy_score(actual, lbs, ubs, conf):
+def interval_accuracy_score(actual, forecast):
+    conf = 0.9
+    z = 1.645
     A = np.array(actual)
-    L = np.array(lbs)
-    U = np.array(ubs)
-    return np.sum(U - L + np.where(A < L, 1, 0) * (L - A) * 2 / conf +
-                  np.where(A > U, 1, 0) * (A - U) * 2 / conf) / len(A)
+    F = np.array(forecast)
+    E = np.abs(A - F)
+    std_dev = np.std(E)
+    mean = np.mean(np.abs(E))
+    lb = mean - z * std_dev / math.sqrt(len(forecast))
+    ub = mean + z * std_dev / math.sqrt(len(forecast))
+    print(f'{std_dev},{mean},{lb},{ub}')
+    return np.sum(ub - lb + np.where(E < lb, 1, 0) * (lb - E) * 2 / conf +
+                  np.where(E > ub, 1, 0) * (E - ub) * 2 / conf) / len(E)
 
 
 def eval_model(predictions, pred_step, actual):
     predictions = predictions[::pred_step]
     actual = actual[::pred_step]
-
-    lbs = [5, 5, 5, 5, 5, 5, 5, 5, 5]
-    ubs = [5, 5, 5, 5, 5, 5, 5, 5, 5]
-    conf = 0.95
 
     print("Total Values: {}".format(min(len(predictions), len(actual))))
     print("Forecast: {}".format(predictions))
@@ -49,17 +52,17 @@ def eval_model(predictions, pred_step, actual):
     mape = mean_absolute_percentage_error(actual, predictions, ignore_zero_values)
     smape = symmetric_mean_absolute_percentage_error(actual, predictions)
     mase = mean_absolute_scaled_error(actual, predictions)
-    # ias = interval_accuracy_score(counts, lbs, ubs, conf)
+    ias = interval_accuracy_score(actual, predictions)
 
     print("Mean Absolute Error: {}".format(mae))
     print("Root Mean Squared Error: {}".format(rmse))
     print("Mean Absolute Percentage Error: {}".format(mape))
     print("Symmetric Mean Absolute Percentage Error: {}".format(smape))
     print("Mean Absolute Scaled Error: {}".format(mase))
-    # print("Mean Interval Accuracy Score: {}".format(ias))
+    print("Mean Interval Accuracy Score: {}".format(ias))
 
 
 if __name__ == '__main__':
-    model = [5, 3, 8, 2, 1, 1, 7, 5, 5]
-    counts = [1, 2, 3, 4, 5, 6, 7, 8, 9]
-    eval_model(model, 1, counts)
+    forecast = [5, 3, 8, 2, 1, 1, 7, 5, 5]
+    actual = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+    eval_model(actual, 1, actual)
