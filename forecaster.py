@@ -51,7 +51,6 @@ def plot(filepath, predictions, title, trainingdata=None):
 def forecast_markov(trainingdata, evaldata):
     n = len(evaldata)
     mod = mc.MarkovChain().from_data(trainingdata['count'])
-    print(evaldata['count'][0])
     ids, states = mod.simulate(n, start=10)
     plot(f'markov_{n}.png', states, 'Forecast based on Markov Chains',
          evaldata['count'].values)
